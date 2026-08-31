@@ -1,8 +1,4 @@
-"""Embedding worker primitives.
-
-The worker only consumes chunks and a provider. Database wiring is kept out
-of the provider so Supabase/PostgreSQL can be replaced or tested separately.
-"""
+"""Embedding worker primitives with strict provider/result validation."""
 from dataclasses import dataclass
 
 from .provider import EmbeddingProvider
@@ -21,12 +17,14 @@ def embed_chunks(
     if not pending:
         return []
 
-    vectors = provider.embed([chunk.content for chunk in pending])
-    if len(vectors) != len(pending):
+    result = provider.embed([chunk.content for chunk in pending])
+    if len(result.vectors) != len(pending):
         raise RuntimeError("Embedding provider returned an unexpected number of vectors")
+    if result.dimensions != provider.dimensions:
+        raise RuntimeError("Embedding result dimensions do not match provider")
 
-    for vector in vectors:
-        if len(vector) != provider.dimension:
+    for vector in result.vectors:
+        if len(vector) != provider.dimensions:
             raise RuntimeError("Embedding provider returned an invalid vector dimension")
 
-    return [(chunk.chunk_id, vector) for chunk, vector in zip(pending, vectors)]
+    return [(chunk.chunk_id, vector) for chunk, vector in zip(pending, result.vectors)]

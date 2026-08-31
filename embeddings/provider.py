@@ -1,8 +1,4 @@
-"""Provider-agnostic embedding interface for ABFINI V0.1.
-
-No model vendor is hard-coded here. A concrete provider can be added later
-without changing document ingestion, storage, or pgvector code.
-"""
+"""Provider-agnostic embedding interface for ABFINI V0.1."""
 from dataclasses import dataclass
 from typing import Protocol, Sequence
 

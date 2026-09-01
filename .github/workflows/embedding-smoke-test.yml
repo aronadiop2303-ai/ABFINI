@@ -1,6 +1,7 @@
 name: Embedding Smoke Test
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'embeddings/**'

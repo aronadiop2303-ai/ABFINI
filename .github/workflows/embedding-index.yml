@@ -1,0 +1,25 @@
+name: ABFINI Embedding Index
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'embeddings/**'
+      - '.github/workflows/embedding-index.yml'
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r embeddings/requirements.txt
+      - name: Index pending chunks in Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EMBEDDING_MODEL: BAAI/bge-base-en-v1.5
+        run: python -m embeddings.index_supabase

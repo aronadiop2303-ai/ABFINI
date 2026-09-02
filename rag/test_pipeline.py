@@ -28,8 +28,10 @@ class FakeGenerationProvider:
         )
 
 
-def fake_rpc(**kwargs):
-    assert len(kwargs["query_embedding"]) == 768
+def fake_rpc(_query_embedding, **kwargs):
+    assert len(_query_embedding) == 768
+    assert kwargs["match_count"] == 5
+    assert kwargs["match_threshold"] == 0.0
     return [
         {
             "id": "chunk-1",

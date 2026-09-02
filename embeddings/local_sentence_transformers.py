@@ -14,7 +14,7 @@ class LocalSentenceTransformerProvider:
 
         self.model = SentenceTransformer(model_name)
         self.model_name = model_name
-        self.dimensions = self.model.get_sentence_embedding_dimension()
+        self.dimensions = self.model.get_embedding_dimension()
         if self.dimensions != expected_dimension:
             raise ValueError(
                 f"Embedding dimension mismatch: model={self.dimensions}, expected={expected_dimension}"

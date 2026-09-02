@@ -8,6 +8,7 @@ on:
       - 'embeddings/provider.py'
       - 'embeddings/local_sentence_transformers.py'
       - 'embeddings/requirements.txt'
+      - 'supabase/migrations/20260902_semantic_search_rpc.sql'
       - '.github/workflows/semantic-search-test.yml'
 
 jobs:

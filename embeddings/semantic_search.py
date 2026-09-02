@@ -10,6 +10,7 @@ from .local_sentence_transformers import LocalSentenceTransformerProvider
 
 MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
 EXPECTED_DIMENSIONS = 768
+RPC_NAME = "semantic_search_document_chunks"
 
 
 def request_json(url: str, method: str = "GET", payload=None):
@@ -39,7 +40,6 @@ def request_json(url: str, method: str = "GET", payload=None):
 
 
 def normalize_supabase_url(raw_url: str) -> str:
-    """Return only the Supabase project origin, never a REST route."""
     value = raw_url.strip().rstrip("/")
     if not value:
         raise RuntimeError("SUPABASE_URL is not configured")
@@ -73,7 +73,6 @@ def semantic_search(
         raise ValueError("match_count must be >= 1")
 
     base = normalize_supabase_url(os.environ.get("SUPABASE_URL", ""))
-
     provider = LocalSentenceTransformerProvider(
         MODEL,
         expected_dimension=EXPECTED_DIMENSIONS,
@@ -86,7 +85,7 @@ def semantic_search(
         )
 
     vector_text = "[" + ",".join(f"{float(x):.10g}" for x in query_vector) + "]"
-    rpc_url = f"{base}/rest/v1/rpc/match_document_chunks"
+    rpc_url = f"{base}/rest/v1/rpc/{RPC_NAME}"
 
     return request_json(
         rpc_url,

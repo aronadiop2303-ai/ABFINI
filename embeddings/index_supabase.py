@@ -47,8 +47,6 @@ def normalize_supabase_url(raw_url: str) -> str:
     if parsed.scheme != "https" or not parsed.netloc:
         raise RuntimeError("SUPABASE_URL must be a full https:// Supabase project URL")
 
-    # Accept a mistakenly supplied /rest/v1 suffix, then remove it so that
-    # this module owns construction of every PostgREST route.
     allowed_paths = {"", "/", "/rest/v1", "/rest/v1/"}
     if parsed.path not in allowed_paths or parsed.query or parsed.fragment:
         raise RuntimeError(
@@ -94,7 +92,7 @@ def main() -> None:
                 f"Chunk {row['id']} returned {len(vector)} dimensions"
             )
 
-        vector_text = "[" + ",".join(f"{float(x):.10g}" for x in vector) + "]"
+        vector_text = "[" + ",".join(repr(float(x)) for x in vector) + "]"
         request_json(
             rpc_url,
             method="POST",

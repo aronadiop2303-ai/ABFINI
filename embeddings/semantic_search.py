@@ -21,6 +21,7 @@ def request_json(url: str, method: str = "GET", payload=None):
     headers = {
         "apikey": key,
         "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
     }
     if body is not None:
         headers["Content-Type"] = "application/json"
@@ -37,6 +38,26 @@ def request_json(url: str, method: str = "GET", payload=None):
         raise RuntimeError(f"Supabase connection error: {exc.reason}") from exc
 
 
+def normalize_supabase_url(raw_url: str) -> str:
+    """Return only the Supabase project origin, never a REST route."""
+    value = raw_url.strip().rstrip("/")
+    if not value:
+        raise RuntimeError("SUPABASE_URL is not configured")
+
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise RuntimeError("SUPABASE_URL must be a full https:// Supabase project URL")
+
+    allowed_paths = {"", "/", "/rest/v1", "/rest/v1/"}
+    if parsed.path not in allowed_paths or parsed.query or parsed.fragment:
+        raise RuntimeError(
+            "SUPABASE_URL must contain only the Supabase project origin "
+            "(for example https://<project>.supabase.co)"
+        )
+
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 def semantic_search(
     query: str,
     match_threshold: float = 0.0,
@@ -51,11 +72,7 @@ def semantic_search(
     if match_count < 1:
         raise ValueError("match_count must be >= 1")
 
-    base = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    if not base:
-        raise RuntimeError("SUPABASE_URL is not configured")
-    if not base.startswith("https://"):
-        raise RuntimeError("SUPABASE_URL must start with https://")
+    base = normalize_supabase_url(os.environ.get("SUPABASE_URL", ""))
 
     provider = LocalSentenceTransformerProvider(
         MODEL,
@@ -69,7 +86,7 @@ def semantic_search(
         )
 
     vector_text = "[" + ",".join(f"{float(x):.10g}" for x in query_vector) + "]"
-    rpc_url = base + "/rest/v1/rpc/match_document_chunks"
+    rpc_url = f"{base}/rest/v1/rpc/match_document_chunks"
 
     return request_json(
         rpc_url,
@@ -90,10 +107,16 @@ def main() -> None:
         match_count=int(os.getenv("MATCH_COUNT", "5")),
     )
 
+    if not isinstance(results, list):
+        raise RuntimeError("Supabase semantic search did not return a JSON array")
+
     print(f"Query: {query}")
     print(f"Results: {len(results)}")
     for index, result in enumerate(results, start=1):
         print(f"Result {index}: {json.dumps(result, ensure_ascii=False)}")
+
+    if not results:
+        raise RuntimeError("Semantic search returned no results")
 
 
 if __name__ == "__main__":

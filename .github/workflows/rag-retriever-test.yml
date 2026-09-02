@@ -1,0 +1,20 @@
+name: ABFINI RAG Retriever Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'rag/**'
+      - 'search/**'
+      - '.github/workflows/rag-retriever-test.yml'
+
+jobs:
+  rag-retriever:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run RAG retriever smoke test
+        run: python -m rag.retriever_test

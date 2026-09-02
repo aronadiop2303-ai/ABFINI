@@ -1,0 +1,20 @@
+name: ABFINI Full RAG Pipeline Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'rag/**'
+      - 'models/**'
+      - '.github/workflows/rag-pipeline-test.yml'
+
+jobs:
+  full-rag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run deterministic Full RAG test
+        run: python -m rag.test_pipeline

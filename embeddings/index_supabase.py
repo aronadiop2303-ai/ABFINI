@@ -2,6 +2,7 @@
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from .local_sentence_transformers import LocalSentenceTransformerProvider
@@ -14,14 +15,20 @@ def request_json(url: str, method: str = "GET", payload=None):
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
     if not key:
         raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured")
-    body = None if payload is None else json.dumps(payload).encode()
-    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+
+    body = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
+    }
     if body is not None:
         headers["Content-Type"] = "application/json"
+
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=60) as response:
-            raw = response.read().decode()
+            raw = response.read().decode("utf-8")
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")
@@ -30,35 +37,71 @@ def request_json(url: str, method: str = "GET", payload=None):
         raise RuntimeError(f"Supabase connection error: {exc.reason}") from exc
 
 
-def main() -> None:
-    base = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    if not base:
+def normalize_supabase_url(raw_url: str) -> str:
+    """Return only the Supabase project origin, never a REST route."""
+    value = raw_url.strip().rstrip("/")
+    if not value:
         raise RuntimeError("SUPABASE_URL is not configured")
-    if not base.startswith("https://"):
-        raise RuntimeError("SUPABASE_URL must start with https://")
 
-    rows = request_json(
-        base + "/rest/v1/document_chunks?select=id,content&embedding=is.null&order=created_at.asc&limit=50"
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise RuntimeError("SUPABASE_URL must be a full https:// Supabase project URL")
+
+    # Accept a mistakenly supplied /rest/v1 suffix, then remove it so that
+    # this module owns construction of every PostgREST route.
+    allowed_paths = {"", "/", "/rest/v1", "/rest/v1/"}
+    if parsed.path not in allowed_paths or parsed.query or parsed.fragment:
+        raise RuntimeError(
+            "SUPABASE_URL must contain only the Supabase project origin "
+            "(for example https://<project>.supabase.co)"
+        )
+
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def main() -> None:
+    base = normalize_supabase_url(os.environ.get("SUPABASE_URL", ""))
+
+    query = urllib.parse.urlencode(
+        {
+            "select": "id,content",
+            "embedding": "is.null",
+            "order": "created_at.asc",
+            "limit": "50",
+        }
     )
+    chunks_url = f"{base}/rest/v1/document_chunks?{query}"
+
+    rows = request_json(chunks_url)
     if not rows:
         print("No pending chunks")
         return
 
     print(f"Found {len(rows)} pending chunk(s)")
-    provider = LocalSentenceTransformerProvider(MODEL, expected_dimension=EXPECTED_DIMENSIONS)
+    provider = LocalSentenceTransformerProvider(
+        MODEL, expected_dimension=EXPECTED_DIMENSIONS
+    )
     result = provider.embed([row["content"] for row in rows])
     if result.dimensions != EXPECTED_DIMENSIONS:
-        raise RuntimeError(f"Embedding dimension mismatch: {result.dimensions} != {EXPECTED_DIMENSIONS}")
+        raise RuntimeError(
+            f"Embedding dimension mismatch: {result.dimensions} != {EXPECTED_DIMENSIONS}"
+        )
 
-    rpc_url = base + "/rest/v1/rpc/set_document_chunk_embedding"
+    rpc_url = f"{base}/rest/v1/rpc/set_document_chunk_embedding"
     for row, vector in zip(rows, result.vectors):
         if len(vector) != EXPECTED_DIMENSIONS:
-            raise RuntimeError(f"Chunk {row['id']} returned {len(vector)} dimensions")
+            raise RuntimeError(
+                f"Chunk {row['id']} returned {len(vector)} dimensions"
+            )
+
         vector_text = "[" + ",".join(f"{float(x):.10g}" for x in vector) + "]"
         request_json(
             rpc_url,
             method="POST",
-            payload={"chunk_id": row["id"], "embedding_text": vector_text},
+            payload={
+                "chunk_id": row["id"],
+                "embedding_text": vector_text,
+            },
         )
         print(f"Indexed chunk {row['id']}")
 

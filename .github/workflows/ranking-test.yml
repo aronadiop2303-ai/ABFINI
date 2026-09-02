@@ -1,0 +1,21 @@
+name: ABFINI Ranking Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'search/ranking.py'
+      - 'search/vector_search.py'
+      - 'search/ranking_test.py'
+      - '.github/workflows/ranking-test.yml'
+
+jobs:
+  ranking:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run ranking smoke test
+        run: python -m search.ranking_test

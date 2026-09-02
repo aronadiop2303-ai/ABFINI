@@ -1,6 +1,7 @@
 """End-to-end ABFINI RAG retrieval test against Supabase."""
 
 import json
+import math
 import os
 import urllib.error
 import urllib.parse
@@ -59,8 +60,8 @@ def main() -> None:
     top_k = int(os.getenv("RAG_TOP_K", "5"))
     max_chars = int(os.getenv("RAG_MAX_CHARS", "12000"))
 
-    if not -1.0 <= threshold <= 1.0:
-        raise ValueError("RAG_THRESHOLD must be between -1.0 and 1.0")
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("RAG_THRESHOLD must be between 0.0 and 1.0")
     if top_k < 1:
         raise ValueError("RAG_TOP_K must be >= 1")
 
@@ -79,10 +80,19 @@ def main() -> None:
     print(f"Raw RPC rows: {len(raw_rows) if isinstance(raw_rows, list) else 'non-list response'}")
     if isinstance(raw_rows, list):
         for row in raw_rows:
+            score = row.get("similarity")
             print(
-                f"Raw result id={row.get('id')} similarity={row.get('similarity')} "
+                f"Raw result id={row.get('id')} similarity={score} "
                 f"chunk={row.get('chunk_index')}"
             )
+            if score is None or not math.isfinite(float(score)):
+                raise AssertionError(
+                    f"Supabase semantic-search RPC returned an invalid similarity: {score!r}"
+                )
+            if not 0.0 <= float(score) <= 1.0:
+                raise AssertionError(
+                    f"Supabase semantic-search RPC returned out-of-range similarity: {score!r}"
+                )
 
     assert isinstance(raw_rows, list), "Supabase semantic-search RPC returned a non-list response"
     assert raw_rows, (

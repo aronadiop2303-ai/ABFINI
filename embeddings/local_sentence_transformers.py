@@ -9,7 +9,7 @@ from .provider import EmbeddingProvider, EmbeddingResult
 
 
 class LocalSentenceTransformerProvider:
-    def __init__(self, model_name: str, expected_dimension: int = 1536) -> None:
+    def __init__(self, model_name: str, expected_dimension: int = 768) -> None:
         from sentence_transformers import SentenceTransformer
 
         self.model = SentenceTransformer(model_name)

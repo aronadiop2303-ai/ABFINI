@@ -1,5 +1,6 @@
 """RAG retrieval orchestration for ABFINI V0.1."""
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any, Callable, Sequence
 
 from search.ranking import rank_results
@@ -57,7 +58,23 @@ def retrieve_context(
         limit=top_k,
         threshold=threshold,
     )
-    ranked = rank_results(results, threshold=threshold, top_k=top_k)
+    # Cosine similarity is mathematically bounded to [-1, 1], but tiny
+    # floating-point overshoots above 1 can occur. Keep the ranking contract
+    # stable by normalizing only those overshoots before filtering.
+    normalized: list[SearchResult] = []
+    for result in results:
+        score = result.similarity
+        if isfinite(score) and score > 1.0:
+            result = SearchResult(
+                id=result.id,
+                document_id=result.document_id,
+                chunk_index=result.chunk_index,
+                content=result.content,
+                metadata=result.metadata,
+                similarity=1.0,
+            )
+        normalized.append(result)
+    ranked = rank_results(normalized, threshold=threshold, top_k=top_k)
     return RetrievedContext(
         results=ranked,
         context=build_context(ranked, max_chars=max_chars),

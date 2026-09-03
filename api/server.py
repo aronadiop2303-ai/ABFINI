@@ -3,14 +3,17 @@
 Exposes the provider-agnostic RAG pipeline through a small JSON API.
 Runtime secrets are read only from environment variables.
 """
+import hmac
 import json
 import os
 import time
 import urllib.error
 import urllib.request
+from collections import defaultdict
+from threading import Lock
 from typing import Any, Callable
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from embeddings.local_sentence_transformers import LocalSentenceTransformerProvider
@@ -19,6 +22,8 @@ from rag.pipeline import answer_question
 
 RPC_NAME = "semantic_search_document_chunks"
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
+DEFAULT_RATE_LIMIT = 30
+RATE_WINDOW_SECONDS = 60
 
 
 class ChatRequest(BaseModel):
@@ -40,6 +45,7 @@ class ChatResponse(BaseModel):
     sources: list[Source]
     retrieval: dict[str, Any]
     latency_ms: int
+    request_id: str
 
 
 def normalize_supabase_url(raw_url: str) -> str:
@@ -89,24 +95,47 @@ def create_app(
     generation_provider: Any | None = None,
     rpc: Callable[..., list[dict[str, Any]]] = supabase_rpc,
     api_key: str | None = None,
+    rate_limit_per_minute: int | None = None,
 ) -> FastAPI:
     app = FastAPI(title="ABFINI API", version="0.1.0")
     app.state.embedding_provider = embedding_provider
     app.state.generation_provider = generation_provider
     app.state.rpc = rpc
     app.state.api_key = api_key if api_key is not None else os.getenv("ABFINI_API_KEY", "").strip()
+    app.state.rate_limit = (
+        rate_limit_per_minute
+        if rate_limit_per_minute is not None
+        else int(os.getenv("ABFINI_RATE_LIMIT_PER_MINUTE", str(DEFAULT_RATE_LIMIT)))
+    )
+    app.state.rate_lock = Lock()
+    app.state.rate_windows: dict[str, list[float]] = defaultdict(list)
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "abfini"}
 
     @app.post("/v1/chat", response_model=ChatResponse)
-    def chat(request: ChatRequest, authorization: str | None = Header(default=None)) -> ChatResponse:
+    def chat(
+        request: ChatRequest,
+        http_request: Request,
+        authorization: str | None = Header(default=None),
+    ) -> ChatResponse:
         expected_key = app.state.api_key
         if not expected_key:
             raise HTTPException(status_code=503, detail="ABFINI_API_KEY is not configured")
-        if authorization != f"Bearer {expected_key}":
+        expected_auth = f"Bearer {expected_key}"
+        if not authorization or not hmac.compare_digest(authorization, expected_auth):
             raise HTTPException(status_code=401, detail="Invalid authorization")
+
+        client_id = http_request.client.host if http_request.client else "unknown"
+        now = time.monotonic()
+        with app.state.rate_lock:
+            timestamps = app.state.rate_windows[client_id]
+            cutoff = now - RATE_WINDOW_SECONDS
+            timestamps[:] = [timestamp for timestamp in timestamps if timestamp > cutoff]
+            if len(timestamps) >= app.state.rate_limit:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+            timestamps.append(now)
 
         embedding_provider = app.state.embedding_provider
         if embedding_provider is None:
@@ -120,6 +149,7 @@ def create_app(
             app.state.generation_provider = generation_provider
 
         started = time.perf_counter()
+        request_id = f"req-{time.time_ns()}"
         try:
             result = answer_question(
                 request.message,
@@ -154,6 +184,7 @@ def create_app(
                 "results": len(sources),
             },
             latency_ms=latency_ms,
+            request_id=request_id,
         )
 
     return app

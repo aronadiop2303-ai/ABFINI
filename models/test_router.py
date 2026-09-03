@@ -10,6 +10,7 @@ class FakeProvider:
     model: str
     answer: str = ""
     error: Exception | None = None
+    model_type: str | None = None
 
     def generate(self, request: GenerationRequest) -> GenerationResult:
         if self.error is not None:
@@ -45,6 +46,28 @@ def test_last_resort_is_used() -> None:
     ]
     result = ModelRouter(providers).generate(request())
     assert result.model == "anthropic"
+
+
+def test_open_source_and_local_routes_are_supported_by_metadata() -> None:
+    providers = [
+        FakeProvider("qwen", answer="open", model_type="open_source"),
+        FakeProvider("local-qwen", answer="local", model_type="local"),
+    ]
+    router = ModelRouter(providers)
+    assert [item.model_type.value for item in router.catalog] == ["open_source", "local"]
+    assert router.models_by_type("local")[0].model == "local-qwen"
+
+
+def test_router_is_hybrid_when_multiple_deployment_types_are_configured() -> None:
+    providers = [
+        FakeProvider("deepseek", answer="cloud"),
+        FakeProvider("qwen", answer="open", model_type="open_weight"),
+        FakeProvider("local-qwen", answer="local", model_type="local"),
+    ]
+    router = ModelRouter(providers)
+    types = {item.model_type.value for item in router.catalog}
+    assert {"proprietary", "open_weight", "local"} == types
+    assert len(router.catalog) == 3
 
 
 def test_all_failures_raise_without_exposing_provider_error_details() -> None:

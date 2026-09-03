@@ -1,15 +1,14 @@
-"""Provider router for ABFINI V0.1.
+"""Extensible model router for ABFINI V0.1.
 
-Order of preference:
-1. DeepSeek
-2. OpenRouter fallback
-3. Anthropic last resort
-
-Providers are injected so the router remains provider-agnostic and easy to test.
+The router is provider-agnostic. It supports proprietary APIs, open-source /
+open-weight models, gateway providers, hybrid deployments, and local models.
+New providers are added by implementing TextGenerationProvider; the routing
+algorithm itself does not need to change.
 """
 from dataclasses import dataclass
 from typing import Sequence
 
+from .model_types import ModelDescriptor, describe_provider
 from .provider import GenerationRequest, GenerationResult, TextGenerationProvider
 
 
@@ -47,3 +46,12 @@ class ModelRouter:
     def model(self) -> str:
         """Expose the primary model for the provider protocol."""
         return getattr(self.providers[0], "model", self.providers[0].__class__.__name__)
+
+    @property
+    def catalog(self) -> tuple[ModelDescriptor, ...]:
+        """Return safe metadata for every configured route, without secrets."""
+        return tuple(describe_provider(provider) for provider in self.providers)
+
+    def models_by_type(self, model_type: str) -> tuple[ModelDescriptor, ...]:
+        """Filter the configured catalog by taxonomy value."""
+        return tuple(item for item in self.catalog if item.model_type.value == model_type)

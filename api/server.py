@@ -18,12 +18,16 @@ from pydantic import BaseModel, Field
 
 from embeddings.local_sentence_transformers import LocalSentenceTransformerProvider
 from models.deepseek import DeepSeekProvider
+from models.open_compatible import OpenCompatibleProvider
+from models.openrouter import OpenRouterProvider
+from models.router import ModelRouter
 from rag.pipeline import answer_question
 
 RPC_NAME = "semantic_search_document_chunks"
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
 DEFAULT_RATE_LIMIT = 30
 RATE_WINDOW_SECONDS = 60
+DEFAULT_MODEL_ORDER = "deepseek,openrouter,open_model"
 
 
 class ChatRequest(BaseModel):
@@ -89,6 +93,28 @@ def supabase_rpc(function_name: str, **params: Any) -> list[dict[str, Any]]:
     return result
 
 
+def build_model_router() -> ModelRouter:
+    """Build the configured provider chain without requiring every provider secret."""
+    factories = {
+        "deepseek": DeepSeekProvider.from_env,
+        "openrouter": OpenRouterProvider.from_env,
+        "open_model": OpenCompatibleProvider.from_env,
+    }
+    providers = []
+    order = os.getenv("ABFINI_MODEL_ORDER", DEFAULT_MODEL_ORDER)
+    for name in (item.strip().lower() for item in order.split(",")):
+        if not name or name not in factories:
+            continue
+        try:
+            provider = factories[name]()
+        except ValueError:
+            continue
+        providers.append(provider)
+    if not providers:
+        raise RuntimeError("no model provider is configured")
+    return ModelRouter(providers)
+
+
 def create_app(
     *,
     embedding_provider: Any | None = None,
@@ -145,7 +171,7 @@ def create_app(
             app.state.embedding_provider = embedding_provider
         generation_provider = app.state.generation_provider
         if generation_provider is None:
-            generation_provider = DeepSeekProvider.from_env()
+            generation_provider = build_model_router()
             app.state.generation_provider = generation_provider
 
         started = time.perf_counter()

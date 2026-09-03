@@ -28,7 +28,8 @@ class FakeGenerationProvider:
         )
 
 
-def fake_rpc(_query_embedding, **kwargs):
+def fake_rpc(function_name, _query_embedding, **kwargs):
+    assert function_name == "semantic_search_document_chunks"
     assert len(_query_embedding) == 768
     assert kwargs["match_count"] == 5
     assert kwargs["match_threshold"] == 0.0

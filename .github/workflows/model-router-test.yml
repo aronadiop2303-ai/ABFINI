@@ -1,0 +1,19 @@
+name: ABFINI Model Router Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'models/**'
+      - '.github/workflows/model-router-test.yml'
+
+jobs:
+  model-router:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run deterministic model router tests
+        run: python -m models.test_router

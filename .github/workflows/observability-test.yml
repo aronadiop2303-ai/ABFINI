@@ -1,0 +1,19 @@
+name: ABFINI Observability Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'observability/**'
+      - '.github/workflows/observability-test.yml'
+
+jobs:
+  observability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run observability tests
+        run: python -m observability.test_metrics

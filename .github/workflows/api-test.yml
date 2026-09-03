@@ -1,0 +1,28 @@
+name: ABFINI API Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'api/**'
+      - 'rag/**'
+      - 'search/**'
+      - 'models/**'
+      - 'embeddings/**'
+      - '.github/workflows/api-test.yml'
+
+jobs:
+  api-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install API dependencies
+        run: pip install -r api/requirements.txt
+
+      - name: Run deterministic API tests
+        run: python -m api.test_server

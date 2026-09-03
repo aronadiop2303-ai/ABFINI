@@ -8,6 +8,7 @@ Requires runtime secrets/configuration:
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from embeddings.local_sentence_transformers import LocalSentenceTransformerProvider
@@ -23,9 +24,19 @@ def normalize_supabase_url(raw_url: str) -> str:
     value = raw_url.strip().rstrip("/")
     if not value:
         raise RuntimeError("SUPABASE_URL is not configured")
-    if not value.startswith("https://") or "/" in value[len("https://") :].rstrip("/"):
+
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme != "https" or not parsed.netloc:
         raise RuntimeError("SUPABASE_URL must be a full https:// Supabase project URL")
-    return value
+
+    allowed_paths = {"", "/", "/rest/v1"}
+    if parsed.path not in allowed_paths or parsed.query or parsed.fragment:
+        raise RuntimeError(
+            "SUPABASE_URL must contain only the Supabase project origin "
+            "(or /rest/v1)"
+        )
+
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def supabase_rpc(function_name: str, **params):

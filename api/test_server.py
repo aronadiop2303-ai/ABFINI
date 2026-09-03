@@ -47,35 +47,33 @@ def fake_rpc(function_name, *, query_embedding, **kwargs):
     ]
 
 
-def test_health():
-    client = TestClient(
+def make_client(*, rate_limit_per_minute=30):
+    return TestClient(
         create_app(
             embedding_provider=FakeEmbeddingProvider(),
             generation_provider=FakeGenerationProvider(),
             rpc=fake_rpc,
             api_key="test-key",
+            rate_limit_per_minute=rate_limit_per_minute,
         )
     )
+
+
+def test_health():
+    client = make_client()
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "abfini"}
 
 
 def test_chat_requires_authentication():
-    client = TestClient(create_app(api_key="test-key"))
+    client = make_client()
     response = client.post("/v1/chat", json={"message": "test"})
     assert response.status_code == 401
 
 
 def test_chat_returns_rag_answer():
-    client = TestClient(
-        create_app(
-            embedding_provider=FakeEmbeddingProvider(),
-            generation_provider=FakeGenerationProvider(),
-            rpc=fake_rpc,
-            api_key="test-key",
-        )
-    )
+    client = make_client()
     response = client.post(
         "/v1/chat",
         headers={"Authorization": "Bearer test-key"},
@@ -88,3 +86,31 @@ def test_chat_returns_rag_answer():
     assert body["retrieval"]["results"] == 1
     assert body["sources"][0]["similarity"] == 0.95
     assert isinstance(body["latency_ms"], int)
+    assert body["request_id"].startswith("req-")
+
+
+def test_chat_rejects_invalid_authentication():
+    client = make_client()
+    response = client.post(
+        "/v1/chat",
+        headers={"Authorization": "Bearer wrong-key"},
+        json={"message": "test"},
+    )
+    assert response.status_code == 401
+
+
+def test_chat_rate_limit():
+    client = make_client(rate_limit_per_minute=1)
+    headers = {"Authorization": "Bearer test-key"}
+    first = client.post(
+        "/v1/chat",
+        headers=headers,
+        json={"message": "Qu'est-ce qu'ABFINI ?"},
+    )
+    second = client.post(
+        "/v1/chat",
+        headers=headers,
+        json={"message": "Qu'est-ce qu'ABFINI ?"},
+    )
+    assert first.status_code == 200
+    assert second.status_code == 429

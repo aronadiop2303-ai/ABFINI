@@ -1,0 +1,30 @@
+name: Test OMNI Agent V0.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'omni-agent/**'
+      - '.github/workflows/omni-agent-test.yml'
+  pull_request:
+    paths:
+      - 'omni-agent/**'
+      - '.github/workflows/omni-agent-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  omni-agent-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest
+      - name: Run OMNI Agent tests
+        run: pytest -q omni-agent/tests

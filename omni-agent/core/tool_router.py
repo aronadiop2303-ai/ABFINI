@@ -42,7 +42,7 @@ class OmniToolRouter:
         spec = self._tools.get(request.tool)
         if spec is None:
             return ActionResult(request.task_id, False, error="tool is not allowlisted")
-        if spec.requires_confirmation and not (confirmed or request.requires_confirmation is False):
+        if spec.requires_confirmation and not confirmed:
             return ActionResult(request.task_id, False, error="tool requires confirmation")
         try:
             output = spec.handler(dict(request.arguments))

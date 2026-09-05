@@ -125,6 +125,48 @@ def test_chat_logs_complete_request_metrics(caplog):
     assert metrics["total_ms"] == response.json()["latency_ms"]
 
 
+def rpc_returning_nothing(function_name, *, query_embedding, **kwargs):
+    return []
+
+
+def test_chat_returns_404_when_no_relevant_knowledge():
+    client = TestClient(
+        create_app(
+            embedding_provider=FakeEmbeddingProvider(),
+            generation_provider=FakeGenerationProvider(),
+            rpc=rpc_returning_nothing,
+            api_key="test-key",
+        )
+    )
+    response = client.post(
+        "/v1/chat",
+        headers={"Authorization": "Bearer test-key"},
+        json={"message": "Qu'est-ce qu'ABFINI ?"},
+    )
+    assert response.status_code == 404
+
+
+def broken_rpc(function_name, *, query_embedding, **kwargs):
+    raise RuntimeError("Supabase HTTP 503: backend unavailable")
+
+
+def test_chat_returns_502_when_retrieval_backend_fails():
+    client = TestClient(
+        create_app(
+            embedding_provider=FakeEmbeddingProvider(),
+            generation_provider=FakeGenerationProvider(),
+            rpc=broken_rpc,
+            api_key="test-key",
+        )
+    )
+    response = client.post(
+        "/v1/chat",
+        headers={"Authorization": "Bearer test-key"},
+        json={"message": "Qu'est-ce qu'ABFINI ?"},
+    )
+    assert response.status_code == 502
+
+
 def test_chat_rate_limit():
     client = make_client(rate_limit_per_minute=1)
     headers = {"Authorization": "Bearer test-key"}

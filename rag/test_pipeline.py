@@ -1,8 +1,17 @@
 """Deterministic unit test for the complete ABFINI RAG pipeline."""
 from dataclasses import dataclass
 
+import pytest
+
 from models.provider import GenerationRequest, GenerationResult
 from observability.metrics import RequestMetrics
+from rag.errors import (
+    EmbeddingFailedError,
+    GenerationFailedError,
+    InvalidQuestionError,
+    NoRelevantKnowledgeError,
+    RetrievalFailedError,
+)
 from rag.pipeline import answer_question
 
 
@@ -78,6 +87,111 @@ def test_full_rag_pipeline_populates_metrics():
     # final status, so total_ms/status remain untouched until it does.
     assert metrics.total_ms is None
     assert metrics.status == "in_progress"
+
+
+def test_answer_question_raises_invalid_question_error_on_empty_question():
+    with pytest.raises(InvalidQuestionError):
+        answer_question("   ", FakeEmbeddingProvider(), FakeGenerationProvider(), fake_rpc)
+
+
+def rpc_returning_nothing(function_name, *, query_embedding, **kwargs):
+    return []
+
+
+def test_answer_question_raises_no_relevant_knowledge_error_with_no_candidates():
+    with pytest.raises(NoRelevantKnowledgeError) as excinfo:
+        answer_question(
+            "Qu'est-ce qu'ABFINI ?",
+            FakeEmbeddingProvider(),
+            FakeGenerationProvider(),
+            rpc_returning_nothing,
+        )
+    assert excinfo.value.reason == "no_candidates"
+
+
+def rpc_returning_low_similarity(function_name, *, query_embedding, **kwargs):
+    return [
+        {
+            "id": "chunk-1",
+            "document_id": "doc-1",
+            "chunk_index": 0,
+            "content": "hors sujet",
+            "metadata": {},
+            "similarity": 0.01,
+        }
+    ]
+
+
+def test_answer_question_raises_no_relevant_knowledge_error_below_threshold():
+    with pytest.raises(NoRelevantKnowledgeError) as excinfo:
+        answer_question(
+            "Qu'est-ce qu'ABFINI ?",
+            FakeEmbeddingProvider(),
+            FakeGenerationProvider(),
+            rpc_returning_low_similarity,
+            threshold=0.5,
+        )
+    assert excinfo.value.reason == "below_threshold"
+
+
+@dataclass
+class BrokenEmbeddingProvider:
+    model: str = "broken-embedding"
+    dimensions: int = 768
+
+    def embed_query(self, text: str) -> list[float]:
+        raise RuntimeError("embedding backend unreachable")
+
+
+def test_answer_question_raises_embedding_failed_error():
+    with pytest.raises(EmbeddingFailedError):
+        answer_question(
+            "Qu'est-ce qu'ABFINI ?", BrokenEmbeddingProvider(), FakeGenerationProvider(), fake_rpc
+        )
+
+
+def broken_rpc(function_name, *, query_embedding, **kwargs):
+    raise RuntimeError("Supabase HTTP 503: backend unavailable")
+
+
+def test_answer_question_raises_retrieval_failed_error():
+    with pytest.raises(RetrievalFailedError):
+        answer_question(
+            "Qu'est-ce qu'ABFINI ?", FakeEmbeddingProvider(), FakeGenerationProvider(), broken_rpc
+        )
+
+
+@dataclass
+class BrokenGenerationProvider:
+    model: str = "broken-generator"
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        raise RuntimeError("all configured model providers failed")
+
+
+def test_answer_question_raises_generation_failed_error_when_provider_raises():
+    with pytest.raises(GenerationFailedError):
+        answer_question(
+            "Qu'est-ce qu'ABFINI ?", FakeEmbeddingProvider(), BrokenGenerationProvider(), fake_rpc
+        )
+
+
+@dataclass
+class EmptyAnswerGenerationProvider:
+    model: str = "empty-generator"
+
+    def generate(self, request: GenerationRequest) -> GenerationResult:
+        return GenerationResult(answer="   ", model=self.model)
+
+
+def test_answer_question_raises_generation_failed_error_on_empty_answer():
+    with pytest.raises(GenerationFailedError):
+        answer_question(
+            "Qu'est-ce qu'ABFINI ?",
+            FakeEmbeddingProvider(),
+            EmptyAnswerGenerationProvider(),
+            fake_rpc,
+        )
 
 
 if __name__ == "__main__":

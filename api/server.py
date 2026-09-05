@@ -5,6 +5,7 @@ Runtime secrets are read only from environment variables.
 """
 import hmac
 import json
+import logging
 import os
 import time
 import urllib.error
@@ -21,7 +22,10 @@ from models.deepseek import DeepSeekProvider
 from models.open_compatible import OpenCompatibleProvider
 from models.openrouter import OpenRouterProvider
 from models.router import ModelRouter
+from observability.metrics import RequestMetrics
 from rag.pipeline import answer_question
+
+logger = logging.getLogger("abfini.api")
 
 RPC_NAME = "semantic_search_document_chunks"
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
@@ -174,8 +178,8 @@ def create_app(
             generation_provider = build_model_router()
             app.state.generation_provider = generation_provider
 
-        started = time.perf_counter()
         request_id = f"req-{time.time_ns()}"
+        metrics = RequestMetrics(request_id=request_id)
         try:
             result = answer_question(
                 request.message,
@@ -185,13 +189,19 @@ def create_app(
                 top_k=request.top_k,
                 threshold=request.threshold,
                 max_chars=request.max_chars,
+                metrics=metrics,
             )
         except ValueError as exc:
+            metrics.finish(status="invalid_request")
+            logger.info("abfini_chat_request", extra={"metrics": metrics.as_dict()})
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
+            metrics.finish(status="error")
+            logger.info("abfini_chat_request", extra={"metrics": metrics.as_dict()})
             raise HTTPException(status_code=502, detail="ABFINI backend unavailable") from exc
 
-        latency_ms = int((time.perf_counter() - started) * 1000)
+        metrics.finish(status="success")
+        logger.info("abfini_chat_request", extra={"metrics": metrics.as_dict()})
         sources = [
             Source(
                 document_id=item.document_id,
@@ -209,7 +219,7 @@ def create_app(
                 "threshold": request.threshold,
                 "results": len(sources),
             },
-            latency_ms=latency_ms,
+            latency_ms=metrics.total_ms,
             request_id=request_id,
         )
 

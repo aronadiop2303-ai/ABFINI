@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 
 from models.provider import GenerationRequest, GenerationResult
+from observability.metrics import RequestMetrics
 from rag.pipeline import answer_question
 
 
@@ -58,5 +59,27 @@ def test_full_rag_pipeline():
     print("Full RAG pipeline test: PASS")
 
 
+def test_full_rag_pipeline_populates_metrics():
+    metrics = RequestMetrics(request_id="req-test")
+    result = answer_question(
+        "Qu'est-ce qu'ABFINI ?",
+        FakeEmbeddingProvider(),
+        FakeGenerationProvider(),
+        fake_rpc,
+        metrics=metrics,
+    )
+    assert metrics.embedding_ms is not None
+    assert metrics.retrieval_ms is not None
+    assert metrics.generation_ms is not None
+    assert metrics.retrieval_results == len(result.retrieved.results) == 1
+    assert metrics.top_similarity == 0.95
+    assert metrics.model == "fake-generator"
+    # answer_question does not call finish(): only the caller knows the
+    # final status, so total_ms/status remain untouched until it does.
+    assert metrics.total_ms is None
+    assert metrics.status == "in_progress"
+
+
 if __name__ == "__main__":
     test_full_rag_pipeline()
+    test_full_rag_pipeline_populates_metrics()

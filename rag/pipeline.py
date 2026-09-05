@@ -8,6 +8,7 @@ from typing import Any, Callable, Sequence
 
 from embeddings.provider import EmbeddingProvider
 from models.provider import GenerationRequest, GenerationResult, TextGenerationProvider
+from observability.metrics import RequestMetrics
 from .retriever import RetrievedContext, retrieve_context
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -35,15 +36,28 @@ def answer_question(
     threshold: float = 0.0,
     max_chars: int = 12000,
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+    metrics: RequestMetrics | None = None,
 ) -> RAGResponse:
-    """Execute the complete ABFINI V0.1 RAG flow and return the answer."""
+    """Execute the complete ABFINI V0.1 RAG flow and return the answer.
+
+    ``metrics``, when provided, is instrumented around each stage (embedding,
+    retrieval, generation) but its overall ``finish()``/logging is the
+    caller's responsibility, since only the caller knows the final status.
+    """
     question = question.strip()
     if not question:
         raise ValueError("question must not be empty")
     if not system_prompt.strip():
         raise ValueError("system_prompt must not be empty")
 
+    if metrics is not None:
+        metrics.start_embedding()
     query_embedding = embedding_provider.embed_query(question)
+    if metrics is not None:
+        metrics.finish_embedding()
+
+    if metrics is not None:
+        metrics.start_retrieval()
     retrieved = retrieve_context(
         query_embedding,
         rpc,
@@ -51,9 +65,14 @@ def answer_question(
         threshold=threshold,
         max_chars=max_chars,
     )
+    if metrics is not None:
+        top_similarity = retrieved.results[0].similarity if retrieved.results else None
+        metrics.finish_retrieval(results=len(retrieved.results), top_similarity=top_similarity)
     if not retrieved.results:
         raise ValueError("No relevant knowledge was retrieved for the question")
 
+    if metrics is not None:
+        metrics.start_generation()
     generation = generation_provider.generate(
         GenerationRequest(
             question=question,
@@ -65,6 +84,8 @@ def answer_question(
         raise TypeError("generation_provider.generate() must return GenerationResult")
     if not generation.answer.strip():
         raise ValueError("generation provider returned an empty answer")
+    if metrics is not None:
+        metrics.finish_generation(model=generation.model)
 
     return RAGResponse(
         question=question,

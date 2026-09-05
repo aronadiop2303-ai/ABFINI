@@ -1,7 +1,9 @@
-"""Deterministic unit test for the complete ABFINI RAG pipeline."""
-from dataclasses import dataclass
+"""Deterministic unit test for the complete ABFINI RAG pipeline.
 
-import pytest
+Kept pytest-free on purpose: the "full-rag" CI job runs this file as a
+plain script (``python -m rag.test_pipeline``) without pytest installed.
+"""
+from dataclasses import dataclass
 
 from models.provider import GenerationRequest, GenerationResult
 from observability.metrics import RequestMetrics
@@ -13,6 +15,14 @@ from rag.errors import (
     RetrievalFailedError,
 )
 from rag.pipeline import answer_question
+
+
+def assert_raises(exc_type, fn):
+    try:
+        fn()
+    except exc_type as exc:
+        return exc
+    raise AssertionError(f"expected {exc_type.__name__} to be raised")
 
 
 @dataclass
@@ -90,8 +100,10 @@ def test_full_rag_pipeline_populates_metrics():
 
 
 def test_answer_question_raises_invalid_question_error_on_empty_question():
-    with pytest.raises(InvalidQuestionError):
-        answer_question("   ", FakeEmbeddingProvider(), FakeGenerationProvider(), fake_rpc)
+    assert_raises(
+        InvalidQuestionError,
+        lambda: answer_question("   ", FakeEmbeddingProvider(), FakeGenerationProvider(), fake_rpc),
+    )
 
 
 def rpc_returning_nothing(function_name, *, query_embedding, **kwargs):
@@ -99,14 +111,16 @@ def rpc_returning_nothing(function_name, *, query_embedding, **kwargs):
 
 
 def test_answer_question_raises_no_relevant_knowledge_error_with_no_candidates():
-    with pytest.raises(NoRelevantKnowledgeError) as excinfo:
-        answer_question(
+    exc = assert_raises(
+        NoRelevantKnowledgeError,
+        lambda: answer_question(
             "Qu'est-ce qu'ABFINI ?",
             FakeEmbeddingProvider(),
             FakeGenerationProvider(),
             rpc_returning_nothing,
-        )
-    assert excinfo.value.reason == "no_candidates"
+        ),
+    )
+    assert exc.reason == "no_candidates"
 
 
 def rpc_returning_low_similarity(function_name, *, query_embedding, **kwargs):
@@ -123,15 +137,17 @@ def rpc_returning_low_similarity(function_name, *, query_embedding, **kwargs):
 
 
 def test_answer_question_raises_no_relevant_knowledge_error_below_threshold():
-    with pytest.raises(NoRelevantKnowledgeError) as excinfo:
-        answer_question(
+    exc = assert_raises(
+        NoRelevantKnowledgeError,
+        lambda: answer_question(
             "Qu'est-ce qu'ABFINI ?",
             FakeEmbeddingProvider(),
             FakeGenerationProvider(),
             rpc_returning_low_similarity,
             threshold=0.5,
-        )
-    assert excinfo.value.reason == "below_threshold"
+        ),
+    )
+    assert exc.reason == "below_threshold"
 
 
 @dataclass
@@ -144,10 +160,12 @@ class BrokenEmbeddingProvider:
 
 
 def test_answer_question_raises_embedding_failed_error():
-    with pytest.raises(EmbeddingFailedError):
-        answer_question(
+    assert_raises(
+        EmbeddingFailedError,
+        lambda: answer_question(
             "Qu'est-ce qu'ABFINI ?", BrokenEmbeddingProvider(), FakeGenerationProvider(), fake_rpc
-        )
+        ),
+    )
 
 
 def broken_rpc(function_name, *, query_embedding, **kwargs):
@@ -155,10 +173,12 @@ def broken_rpc(function_name, *, query_embedding, **kwargs):
 
 
 def test_answer_question_raises_retrieval_failed_error():
-    with pytest.raises(RetrievalFailedError):
-        answer_question(
+    assert_raises(
+        RetrievalFailedError,
+        lambda: answer_question(
             "Qu'est-ce qu'ABFINI ?", FakeEmbeddingProvider(), FakeGenerationProvider(), broken_rpc
-        )
+        ),
+    )
 
 
 @dataclass
@@ -170,10 +190,12 @@ class BrokenGenerationProvider:
 
 
 def test_answer_question_raises_generation_failed_error_when_provider_raises():
-    with pytest.raises(GenerationFailedError):
-        answer_question(
+    assert_raises(
+        GenerationFailedError,
+        lambda: answer_question(
             "Qu'est-ce qu'ABFINI ?", FakeEmbeddingProvider(), BrokenGenerationProvider(), fake_rpc
-        )
+        ),
+    )
 
 
 @dataclass
@@ -185,15 +207,25 @@ class EmptyAnswerGenerationProvider:
 
 
 def test_answer_question_raises_generation_failed_error_on_empty_answer():
-    with pytest.raises(GenerationFailedError):
-        answer_question(
+    assert_raises(
+        GenerationFailedError,
+        lambda: answer_question(
             "Qu'est-ce qu'ABFINI ?",
             FakeEmbeddingProvider(),
             EmptyAnswerGenerationProvider(),
             fake_rpc,
-        )
+        ),
+    )
 
 
 if __name__ == "__main__":
     test_full_rag_pipeline()
     test_full_rag_pipeline_populates_metrics()
+    test_answer_question_raises_invalid_question_error_on_empty_question()
+    test_answer_question_raises_no_relevant_knowledge_error_with_no_candidates()
+    test_answer_question_raises_no_relevant_knowledge_error_below_threshold()
+    test_answer_question_raises_embedding_failed_error()
+    test_answer_question_raises_retrieval_failed_error()
+    test_answer_question_raises_generation_failed_error_when_provider_raises()
+    test_answer_question_raises_generation_failed_error_on_empty_answer()
+    print("RAG pipeline typed-error tests: PASS")

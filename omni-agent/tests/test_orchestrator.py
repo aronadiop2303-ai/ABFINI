@@ -33,7 +33,9 @@ def test_complete_cycle_executes_allowed_tool_and_remembers_answer():
     result = orchestrator.run("Qu'est-ce qu'ABFINI ?")
     assert result.answer
     assert result.model == "test-model"
-    assert memory.search("ABFINI")[0].kind == "task"
+    types = {entry.kind for entry in memory.search("ABFINI")}
+    assert "task" in types
+    assert "answer" in types
 
 
 def test_permission_denies_unknown_tool():

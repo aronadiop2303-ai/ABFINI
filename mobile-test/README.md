@@ -48,7 +48,35 @@ npm start
 ## Validation effectuée sans appareil physique
 
 `npx expo export --platform ios` a été exécuté pour confirmer que
-l'application se bundle réellement sans erreur (Metro, 580 modules) — cela
+l'application se bundle réellement sans erreur (Metro, 589 modules) — cela
 valide le code, mais un test avec Expo Go sur un téléphone réel reste
 nécessaire pour confirmer l'expérience de bout en bout (E2E mobile réel,
 Phase 9).
+
+## KNOWN ISSUES
+
+- **Corrigé (P0)** : le champ de saisie et le bouton Envoyer étaient rendus
+  cachés sous la barre de navigation système sur Android. Cause confirmée :
+  `App.js` utilisait `SafeAreaView` importé depuis `react-native` (API
+  dépréciée, n'appliquait plus correctement l'inset bas sur certains
+  appareils Android) au lieu de `react-native-safe-area-context`. Corrigé en
+  passant à `react-native-safe-area-context` (version `~5.7.0`, résolue
+  depuis le manifeste de compatibilité SDK 57 embarqué dans le paquet
+  `expo` — la commande `expo install` elle-même échouait dans
+  l'environnement Claude Code faute d'accès réseau à l'API Expo, d'où cette
+  résolution manuelle mais équivalente), en enveloppant l'app dans
+  `SafeAreaProvider`, et en ajustant `KeyboardAvoidingView` (`behavior:
+  "height"` sur Android au lieu de `undefined`).
+  **Vérification visuelle non faite depuis Claude Code** (pas d'appareil
+  physique ni de simulateur disponibles ici) — seule la validation possible
+  ici a été faite : le bundle Metro se construit toujours sans erreur
+  (`expo export --platform ios`, 589 modules). **Arona doit confirmer sur
+  son téléphone** que le champ de saisie et le bouton sont maintenant
+  visibles et utilisables.
+  Pour récupérer le correctif : un simple `git pull` dans le dossier du
+  dépôt suffit — le serveur Metro déjà lancé (`npx expo start`) rechargera
+  l'app automatiquement sur le téléphone, sans avoir besoin de rescanner le
+  QR code (redémarrer `npm start` uniquement si le rechargement automatique
+  ne se déclenche pas).
+- Le cycle complet question → réponse réelle sur téléphone physique n'est
+  pas encore confirmé (seul le chargement de l'écran d'accueil l'est).

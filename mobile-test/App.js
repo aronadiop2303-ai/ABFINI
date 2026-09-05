@@ -5,12 +5,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 const API_URL = process.env.EXPO_PUBLIC_ABFINI_API_URL;
 const API_KEY = process.env.EXPO_PUBLIC_ABFINI_API_KEY;
@@ -78,58 +78,61 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <Text style={styles.title}>ABFINI ∞ — Test</Text>
-
-        <FlatList
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        <KeyboardAvoidingView
           style={styles.flex}
-          contentContainerStyle={styles.listContent}
-          data={turns}
-          keyExtractor={(_, index) => String(index)}
-          ListEmptyComponent={
-            <Text style={styles.empty}>Pose une question, par exemple : « Qu'est-ce qu'ABFINI ? »</Text>
-          }
-          renderItem={({ item }) => (
-            <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.assistantBubble, item.error && styles.errorBubble]}>
-              <Text style={item.role === "user" ? styles.userText : styles.assistantText}>{item.text}</Text>
-              {item.model ? <Text style={styles.meta}>Modèle : {item.model}</Text> : null}
-              {item.sources && item.sources.length > 0 ? (
-                <View style={styles.sources}>
-                  <Text style={styles.metaTitle}>Sources :</Text>
-                  {item.sources.map((source, index) => (
-                    <Text key={index} style={styles.meta}>
-                      • document={source.document_id} · chunk={source.chunk_index} · similarité={source.similarity.toFixed(3)}
-                    </Text>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          )}
-        />
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
+        >
+          <Text style={styles.title}>ABFINI ∞ — Test</Text>
 
-        <View style={styles.composer}>
-          <TextInput
-            style={styles.input}
-            value={message}
-            onChangeText={setMessage}
-            placeholder="Écrire un message…"
-            multiline
-            maxLength={4000}
+          <FlatList
+            style={styles.flex}
+            contentContainerStyle={styles.listContent}
+            data={turns}
+            keyExtractor={(_, index) => String(index)}
+            ListEmptyComponent={
+              <Text style={styles.empty}>Pose une question, par exemple : « Qu'est-ce qu'ABFINI ? »</Text>
+            }
+            renderItem={({ item }) => (
+              <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.assistantBubble, item.error && styles.errorBubble]}>
+                <Text style={item.role === "user" ? styles.userText : styles.assistantText}>{item.text}</Text>
+                {item.model ? <Text style={styles.meta}>Modèle : {item.model}</Text> : null}
+                {item.sources && item.sources.length > 0 ? (
+                  <View style={styles.sources}>
+                    <Text style={styles.metaTitle}>Sources :</Text>
+                    {item.sources.map((source, index) => (
+                      <Text key={index} style={styles.meta}>
+                        • document={source.document_id} · chunk={source.chunk_index} · similarité={source.similarity.toFixed(3)}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            )}
           />
-          <Pressable
-            style={[styles.sendButton, sending && styles.sendButtonDisabled]}
-            onPress={sendMessage}
-            disabled={sending}
-          >
-            {sending ? <ActivityIndicator color="#08111f" /> : <Text style={styles.sendText}>Envoyer</Text>}
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+          <View style={styles.composer}>
+            <TextInput
+              style={styles.input}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Écrire un message…"
+              multiline
+              maxLength={4000}
+            />
+            <Pressable
+              style={[styles.sendButton, sending && styles.sendButtonDisabled]}
+              onPress={sendMessage}
+              disabled={sending}
+            >
+              {sending ? <ActivityIndicator color="#08111f" /> : <Text style={styles.sendText}>Envoyer</Text>}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

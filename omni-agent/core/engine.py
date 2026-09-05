@@ -5,6 +5,8 @@ from typing import Any
 
 from .models import ActionRequest, ActionResult, Task, TaskState
 
+_TERMINAL_STATES = frozenset({TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED})
+
 
 @dataclass
 class OmniCore:
@@ -62,6 +64,26 @@ class OmniCore:
             task.id,
             {"output": result.output, "error": result.error},
         )
+        return task
+
+    def wait_for_confirmation(self, task_id: str) -> Task:
+        task = self._get_task(task_id)
+        task.state = TaskState.WAITING_CONFIRMATION
+        self._event("action.waiting_confirmation", task.id, {})
+        return task
+
+    def start_execution(self, task_id: str) -> Task:
+        task = self._get_task(task_id)
+        task.state = TaskState.EXECUTING
+        self._event("action.executing", task.id, {})
+        return task
+
+    def cancel(self, task_id: str) -> Task:
+        task = self._get_task(task_id)
+        if task.state in _TERMINAL_STATES:
+            raise ValueError(f"cannot cancel a task in terminal state: {task.state.value}")
+        task.state = TaskState.CANCELLED
+        self._event("task.cancelled", task.id, {})
         return task
 
     def _get_task(self, task_id: str) -> Task:

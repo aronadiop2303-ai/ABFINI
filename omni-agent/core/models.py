@@ -10,8 +10,11 @@ class TaskState(str, Enum):
     CREATED = "created"
     PLANNING = "planning"
     WAITING_TOOL = "waiting_tool"
+    WAITING_CONFIRMATION = "waiting_confirmation"
+    EXECUTING = "executing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 @dataclass

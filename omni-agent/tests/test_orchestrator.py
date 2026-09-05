@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from core import ActionResult, OmniMemory, OmniOrchestrator, OmniPermissionEngine, OmniPlanner, OmniToolRouter, ToolSpec
+from core import ActionResult, OmniMemory, OmniOrchestrator, OmniPermissionEngine, OmniPlanner, OmniToolRouter, TaskState, ToolSpec
 
 
 def planner() -> OmniPlanner:
@@ -59,12 +59,26 @@ def test_confirmation_is_required_before_confirmed_execution():
         ActionResult(unconfirmed.task.id, False, error="user confirmation required")
     ]
     assert unconfirmed.answer == ""
+    assert unconfirmed.task.state == TaskState.WAITING_CONFIRMATION
 
     confirmed = orchestrator.run(
         "écrire un fichier", tool="write", tool_arguments={"path": "a.txt"}, confirmed=True
     )
     assert confirmed.tool_results == [ActionResult(confirmed.task.id, True, output={"path": "a.txt"})]
     assert confirmed.answer == "done"
+    assert confirmed.task.state == TaskState.COMPLETED
+
+
+def test_declining_confirmation_cancels_the_task():
+    router = OmniToolRouter([ToolSpec("write", lambda args: args, requires_confirmation=True)])
+    permissions = OmniPermissionEngine({"write"}, {"write"})
+    orchestrator = OmniOrchestrator(planner(), router, lambda _: ("done", "test-model"), permissions=permissions)
+
+    pending = orchestrator.run("écrire un fichier", tool="write", tool_arguments={"path": "a.txt"})
+    assert pending.task.state == TaskState.WAITING_CONFIRMATION
+
+    cancelled = orchestrator.cancel(pending.task.id)
+    assert cancelled.state == TaskState.CANCELLED
 
 
 def test_memory_search_and_recent():

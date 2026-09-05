@@ -20,3 +20,16 @@ class OmniRAGAdapter:
 
     def answer(self, question: str) -> RAGResponse:
         return answer_question(question, self.embedding_provider, self.generation_provider, self.rpc, top_k=self.top_k, threshold=self.threshold, max_chars=self.max_chars)
+
+    def as_answer_fn(self) -> Callable[[str], tuple[str, str | None]]:
+        """Expose this adapter as the ``answer_fn`` contract OMNI Core expects.
+
+        ``OmniOrchestrator``/``OmniAgent`` only know a task goal and need back
+        ``(answer, model)``; they must stay unaware of the RAG pipeline itself.
+        """
+
+        def answer_fn(question: str) -> tuple[str, str | None]:
+            response = self.answer(question)
+            return response.answer, response.model
+
+        return answer_fn

@@ -1,0 +1,52 @@
+# Render Blueprint for the ABFINI API.
+# No secret values live here — every sensitive variable uses `sync: false`,
+# which makes Render prompt for it once in the dashboard instead of storing
+# it in this repo. Values with a safe code-level default are still listed
+# here (also `sync: false`) so nothing required by api/server.py (and the
+# modules it imports transitively) is left undocumented.
+services:
+  - type: web
+    name: abfini-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter # sentence-transformers/torch need more than the free tier's 512MB RAM; adjust to your budget
+    healthCheckPath: /health
+    envVars:
+      # Required, no default — Supabase/pgvector retrieval
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Required, no default — protects POST /v1/chat
+      - key: ABFINI_API_KEY
+        sync: false
+      # At least one text-generation provider key is required
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPEN_MODEL_API_KEY
+        sync: false
+      # Optional overrides (code defaults shown in api/server.py, models/*.py) — set only if you need a non-default value
+      - key: DEEPSEEK_MODEL
+        sync: false
+      - key: DEEPSEEK_BASE_URL
+        sync: false
+      - key: OPENROUTER_MODEL
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        sync: false
+      - key: OPEN_MODEL_NAME
+        sync: false
+      - key: OPEN_MODEL_BASE_URL
+        sync: false
+      - key: ABFINI_MODEL_ORDER
+        sync: false
+      - key: ABFINI_RATE_LIMIT_PER_MINUTE
+        sync: false
+      - key: EMBEDDING_MODEL
+        sync: false
+      # Set to the exact Vercel domain (e.g. https://abfini-web.vercel.app) once the Web client is pointed at this API
+      - key: ABFINI_CORS_ORIGINS
+        sync: false

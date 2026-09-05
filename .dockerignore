@@ -1,0 +1,12 @@
+.git
+**/__pycache__
+**/*.pyc
+.pytest_cache
+mobile-test/node_modules
+web
+mobile-test
+documents
+omni-agent
+supabase
+.env
+.env.*

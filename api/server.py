@@ -15,6 +15,7 @@ from threading import Lock
 from typing import Any, Callable
 
 from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from embeddings.local_sentence_transformers import LocalSentenceTransformerProvider
@@ -126,6 +127,60 @@ def build_model_router() -> ModelRouter:
     return ModelRouter(providers)
 
 
+def cors_origins_from_env() -> list[str]:
+    raw = os.getenv("ABFINI_CORS_ORIGINS", "").strip()
+    if not raw:
+        return []
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+def check_supabase_dependency() -> dict[str, str]:
+    """Real connectivity check: a lightweight authenticated call to PostgREST."""
+    try:
+        base = normalize_supabase_url(os.environ.get("SUPABASE_URL", ""))
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        if not key:
+            raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured")
+        request = urllib.request.Request(
+            f"{base}/rest/v1/",
+            headers={"apikey": key, "Authorization": f"Bearer {key}"},
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=5):
+            pass
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
+def check_embedding_dependency(embedding_provider: Any) -> dict[str, Any]:
+    """Real check: actually embed a short string and confirm the dimension."""
+    try:
+        vector = embedding_provider.embed_query("ping")
+        if len(vector) != 768:
+            raise RuntimeError(f"unexpected embedding dimension: {len(vector)}")
+        return {"status": "ok", "model": getattr(embedding_provider, "model", EMBEDDING_MODEL)}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
+def check_model_router_dependency(generation_provider: Any) -> dict[str, Any]:
+    """Real check: confirm at least one provider is actually configured (no LLM call)."""
+    try:
+        catalog = generation_provider.catalog
+        if not catalog:
+            raise RuntimeError("no model provider is configured")
+        return {
+            "status": "ok",
+            "providers": [
+                {"provider": item.provider, "model": item.model, "type": item.model_type.value}
+                for item in catalog
+            ],
+        }
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
 def create_app(
     *,
     embedding_provider: Any | None = None,
@@ -147,9 +202,43 @@ def create_app(
     app.state.rate_lock = Lock()
     app.state.rate_windows: dict[str, list[float]] = defaultdict(list)
 
+    cors_origins = cors_origins_from_env()
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_methods=["GET", "POST"],
+            allow_headers=["Authorization", "Content-Type"],
+        )
+
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "abfini"}
+
+    @app.get("/health/dependencies")
+    def health_dependencies() -> dict[str, Any]:
+        embedding_provider = app.state.embedding_provider
+        if embedding_provider is None:
+            embedding_provider = LocalSentenceTransformerProvider(
+                EMBEDDING_MODEL, expected_dimension=768
+            )
+            app.state.embedding_provider = embedding_provider
+        generation_provider = app.state.generation_provider
+        try:
+            if generation_provider is None:
+                generation_provider = build_model_router()
+                app.state.generation_provider = generation_provider
+            model_router_check = check_model_router_dependency(generation_provider)
+        except Exception as exc:
+            model_router_check = {"status": "error", "detail": str(exc)}
+
+        dependencies = {
+            "supabase": check_supabase_dependency(),
+            "embedding": check_embedding_dependency(embedding_provider),
+            "model_router": model_router_check,
+        }
+        overall = "ok" if all(dep["status"] == "ok" for dep in dependencies.values()) else "degraded"
+        return {"status": overall, "service": "abfini", "dependencies": dependencies}
 
     @app.post("/v1/chat", response_model=ChatResponse)
     def chat(

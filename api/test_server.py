@@ -99,6 +99,32 @@ def test_chat_rejects_invalid_authentication():
     assert response.status_code == 401
 
 
+def test_chat_logs_complete_request_metrics(caplog):
+    import logging
+
+    client = make_client()
+    with caplog.at_level(logging.INFO, logger="abfini.api"):
+        response = client.post(
+            "/v1/chat",
+            headers={"Authorization": "Bearer test-key"},
+            json={"message": "Qu'est-ce qu'ABFINI ?"},
+        )
+    assert response.status_code == 200
+
+    records = [r for r in caplog.records if r.name == "abfini.api"]
+    assert len(records) == 1
+    metrics = records[0].metrics
+    assert metrics["request_id"] == response.json()["request_id"]
+    assert metrics["status"] == "success"
+    assert metrics["model"] == "fake-generator"
+    assert metrics["retrieval_results"] == 1
+    assert metrics["top_similarity"] == 0.95
+    assert metrics["embedding_ms"] is not None
+    assert metrics["retrieval_ms"] is not None
+    assert metrics["generation_ms"] is not None
+    assert metrics["total_ms"] == response.json()["latency_ms"]
+
+
 def test_chat_rate_limit():
     client = make_client(rate_limit_per_minute=1)
     headers = {"Authorization": "Bearer test-key"}

@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2]))
+sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from models.provider import GenerationResult
 from integrations.rag_adapter import OmniRAGAdapter
@@ -27,7 +28,8 @@ class FakeGeneration:
 
 
 def test_omni_rag_adapter_runs_full_rag_contract():
-    def rpc(query_embedding, match_threshold, match_count):
+    def rpc(function_name, *, query_embedding, match_threshold, match_count):
+        assert function_name == "semantic_search_document_chunks"
         assert len(query_embedding) == 768
         return [{"id": "chunk-1", "document_id": "doc-1", "chunk_index": 0, "content": "ABFINI est une couche de connaissance.", "metadata": {}, "similarity": 0.99}]
 

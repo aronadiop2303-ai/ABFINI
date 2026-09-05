@@ -57,10 +57,16 @@ class OmniOrchestrator:
             decision = self.permissions.decide(action.tool, action.arguments)
             if not decision.allowed:
                 result = ActionResult(task.id, False, error=decision.reason)
-            elif (decision.requires_confirmation or action.requires_confirmation) and not confirmed:
+                tool_results.append(result)
+                self.core.apply_result(result)
+                return OrchestrationResult(task, "", None, tool_results)
+            if (decision.requires_confirmation or action.requires_confirmation) and not confirmed:
+                self.core.wait_for_confirmation(task.id)
                 result = ActionResult(task.id, False, error="user confirmation required")
-            else:
-                result = self.tools.execute(action, confirmed=confirmed)
+                tool_results.append(result)
+                return OrchestrationResult(task, "", None, tool_results)
+            self.core.start_execution(task.id)
+            result = self.tools.execute(action, confirmed=confirmed)
             tool_results.append(result)
             self.core.apply_result(result)
             if not result.success:
@@ -75,3 +81,7 @@ class OmniOrchestrator:
         self.memory.remember(answer, kind="answer", metadata={"task_id": task.id, "model": model})
         task.state = task.state.COMPLETED
         return OrchestrationResult(task, answer, model, tool_results)
+
+    def cancel(self, task_id: str) -> Task:
+        """Cancel a task the user declined to confirm (or any other non-terminal task)."""
+        return self.core.cancel(task_id)

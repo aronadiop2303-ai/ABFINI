@@ -2,7 +2,7 @@
 
 ## Brique 2 — fondation vectorielle
 
-Les `document_chunks` disposent maintenant d'une colonne `embedding vector(1536)` dans PostgreSQL grâce à l'extension `pgvector`.
+Les `document_chunks` disposent maintenant d'une colonne `embedding vector(768)` dans PostgreSQL grâce à l'extension `pgvector`.
 
 ### Brique 2.1 — contrat provider
 
@@ -22,7 +22,7 @@ Chunks
   ↓
 EmbeddingProvider
   ↓
-1536 dimensions
+768 dimensions
   ↓
 PostgreSQL / pgvector
   ↓
@@ -35,7 +35,7 @@ Recherche sémantique
 
 Aucune clé API et aucun fournisseur n'est codé en dur dans le cœur d'ABFINI. Le provider concret sera ajouté après validation du modèle d'embeddings choisi.
 
-Le modèle de production doit produire exactement 1536 dimensions, ou une migration de schéma devra adapter la dimension.
+Le modèle de production doit produire exactement 768 dimensions, ou une migration de schéma devra adapter la dimension.
 
 ## Prochaine étape
 

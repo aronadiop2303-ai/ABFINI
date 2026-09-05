@@ -15,6 +15,20 @@ def result(id: str, similarity: float, content: str = "content", chunk_index: in
     )
 
 
+def test_nan_and_infinity_are_excluded():
+    ranked = rank_results(
+        [
+            result("nan", float("nan")),
+            result("inf", float("inf")),
+            result("neg-inf", float("-inf")),
+            result("valid", 0.75),
+        ],
+        threshold=0.0,
+        top_k=10,
+    )
+    assert [item.id for item in ranked] == ["valid"]
+
+
 def main() -> None:
     ranked = rank_results(
         [
@@ -30,6 +44,8 @@ def main() -> None:
     assert [item.id for item in ranked] == ["high", "mid"]
     assert all(item.similarity >= 0.60 for item in ranked)
     assert len(ranked) == 2
+
+    test_nan_and_infinity_are_excluded()
     print("Ranking test: PASS")
 
 

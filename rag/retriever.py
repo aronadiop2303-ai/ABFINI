@@ -11,6 +11,9 @@ from search.vector_search import SearchResult, search_chunks
 class RetrievedContext:
     results: list[SearchResult]
     context: str
+    # Rows returned by the RPC before threshold/rank filtering, so a caller
+    # can tell "nothing came back" apart from "everything was filtered out".
+    raw_result_count: int = 0
 
 
 def build_context(results: Sequence[SearchResult], max_chars: int = 12000) -> str:
@@ -78,4 +81,5 @@ def retrieve_context(
     return RetrievedContext(
         results=ranked,
         context=build_context(ranked, max_chars=max_chars),
+        raw_result_count=len(results),
     )

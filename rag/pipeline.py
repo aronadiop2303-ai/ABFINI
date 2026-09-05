@@ -9,6 +9,13 @@ from typing import Any, Callable, Sequence
 from embeddings.provider import EmbeddingProvider
 from models.provider import GenerationRequest, GenerationResult, TextGenerationProvider
 from observability.metrics import RequestMetrics
+from .errors import (
+    EmbeddingFailedError,
+    GenerationFailedError,
+    InvalidQuestionError,
+    NoRelevantKnowledgeError,
+    RetrievalFailedError,
+)
 from .retriever import RetrievedContext, retrieve_context
 
 DEFAULT_SYSTEM_PROMPT = (
@@ -46,44 +53,56 @@ def answer_question(
     """
     question = question.strip()
     if not question:
-        raise ValueError("question must not be empty")
+        raise InvalidQuestionError("question must not be empty")
     if not system_prompt.strip():
-        raise ValueError("system_prompt must not be empty")
+        raise InvalidQuestionError("system_prompt must not be empty")
 
     if metrics is not None:
         metrics.start_embedding()
-    query_embedding = embedding_provider.embed_query(question)
+    try:
+        query_embedding = embedding_provider.embed_query(question)
+    except Exception as exc:
+        raise EmbeddingFailedError(str(exc)) from exc
     if metrics is not None:
         metrics.finish_embedding()
 
     if metrics is not None:
         metrics.start_retrieval()
-    retrieved = retrieve_context(
-        query_embedding,
-        rpc,
-        top_k=top_k,
-        threshold=threshold,
-        max_chars=max_chars,
-    )
+    try:
+        retrieved = retrieve_context(
+            query_embedding,
+            rpc,
+            top_k=top_k,
+            threshold=threshold,
+            max_chars=max_chars,
+        )
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise RetrievalFailedError(str(exc)) from exc
     if metrics is not None:
         top_similarity = retrieved.results[0].similarity if retrieved.results else None
         metrics.finish_retrieval(results=len(retrieved.results), top_similarity=top_similarity)
     if not retrieved.results:
-        raise ValueError("No relevant knowledge was retrieved for the question")
+        reason = "below_threshold" if retrieved.raw_result_count > 0 else "no_candidates"
+        raise NoRelevantKnowledgeError(reason)
 
     if metrics is not None:
         metrics.start_generation()
-    generation = generation_provider.generate(
-        GenerationRequest(
-            question=question,
-            context=retrieved.context,
-            system_prompt=system_prompt,
+    try:
+        generation = generation_provider.generate(
+            GenerationRequest(
+                question=question,
+                context=retrieved.context,
+                system_prompt=system_prompt,
+            )
         )
-    )
+    except Exception as exc:
+        raise GenerationFailedError(str(exc)) from exc
     if not isinstance(generation, GenerationResult):
-        raise TypeError("generation_provider.generate() must return GenerationResult")
+        raise GenerationFailedError("generation_provider.generate() must return GenerationResult")
     if not generation.answer.strip():
-        raise ValueError("generation provider returned an empty answer")
+        raise GenerationFailedError("generation provider returned an empty answer")
     if metrics is not None:
         metrics.finish_generation(model=generation.model)
 

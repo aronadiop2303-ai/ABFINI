@@ -23,6 +23,13 @@ from models.open_compatible import OpenCompatibleProvider
 from models.openrouter import OpenRouterProvider
 from models.router import ModelRouter
 from observability.metrics import RequestMetrics
+from rag.errors import (
+    EmbeddingFailedError,
+    GenerationFailedError,
+    InvalidQuestionError,
+    NoRelevantKnowledgeError,
+    RetrievalFailedError,
+)
 from rag.pipeline import answer_question
 
 logger = logging.getLogger("abfini.api")
@@ -191,6 +198,18 @@ def create_app(
                 max_chars=request.max_chars,
                 metrics=metrics,
             )
+        except InvalidQuestionError as exc:
+            metrics.finish(status="invalid_request")
+            logger.info("abfini_chat_request", extra={"metrics": metrics.as_dict()})
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except NoRelevantKnowledgeError as exc:
+            metrics.finish(status="no_knowledge")
+            logger.info("abfini_chat_request", extra={"metrics": metrics.as_dict()})
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (EmbeddingFailedError, RetrievalFailedError, GenerationFailedError) as exc:
+            metrics.finish(status="error")
+            logger.info("abfini_chat_request", extra={"metrics": metrics.as_dict()})
+            raise HTTPException(status_code=502, detail="ABFINI backend unavailable") from exc
         except ValueError as exc:
             metrics.finish(status="invalid_request")
             logger.info("abfini_chat_request", extra={"metrics": metrics.as_dict()})

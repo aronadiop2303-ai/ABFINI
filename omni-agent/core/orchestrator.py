@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 from .engine import OmniCore
 from .memory import OmniMemory
-from .models import ActionRequest, ActionResult, Task
+from .models import ActionResult, Task
 from .permissions import OmniPermissionEngine
 from .planner import OmniPlanner
 from .tool_router import OmniToolRouter
@@ -30,16 +30,30 @@ class OmniOrchestrator:
         self.memory = memory or OmniMemory()
         self.permissions = permissions or OmniPermissionEngine()
 
-    def run(self, goal: str, *, action: ActionRequest | None = None, confirmed: bool = False, metadata: dict[str, Any] | None = None) -> OrchestrationResult:
+    def run(
+        self,
+        goal: str,
+        *,
+        tool: str | None = None,
+        tool_arguments: dict[str, Any] | None = None,
+        requires_confirmation: bool = False,
+        confirmed: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> OrchestrationResult:
         task = self.core.create_task(goal, metadata)
         self.memory.remember(task.goal, kind="task", metadata={"task_id": task.id})
         plan = self.planner.create_plan(task.goal)
         self.core.plan(task.id, plan.steps)
 
         tool_results: list[ActionResult] = []
-        if action is not None:
-            if action.task_id != task.id:
-                raise ValueError("action task_id does not match current task")
+        if tool is not None:
+            action = self.core.request_action(
+                task.id,
+                action=tool,
+                tool=tool,
+                arguments=tool_arguments,
+                requires_confirmation=requires_confirmation,
+            )
             decision = self.permissions.decide(action.tool, action.arguments)
             if not decision.allowed:
                 result = ActionResult(task.id, False, error=decision.reason)

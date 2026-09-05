@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ABFINI ∞ — Test Client</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>ABFINI ∞</h1>
+    <p class="subtitle">Client de test V0.1 — aucune réponse simulée, tout provient du backend réel.</p>
+  </header>
+
+  <section class="status-panel" id="status-panel" aria-label="État système">
+    <div class="status-item" data-key="api">
+      <span class="dot" data-dot="api"></span>
+      <span class="status-label">API</span>
+      <span class="status-detail" data-detail="api">vérification…</span>
+    </div>
+    <div class="status-item" data-key="model_router">
+      <span class="dot" data-dot="model_router"></span>
+      <span class="status-label">Model Router</span>
+      <span class="status-detail" data-detail="model_router">vérification…</span>
+    </div>
+    <div class="status-item" data-key="embedding">
+      <span class="dot" data-dot="embedding"></span>
+      <span class="status-label">Embeddings</span>
+      <span class="status-detail" data-detail="embedding">vérification…</span>
+    </div>
+    <div class="status-item" data-key="supabase">
+      <span class="dot" data-dot="supabase"></span>
+      <span class="status-label">Vector Search (Supabase)</span>
+      <span class="status-detail" data-detail="supabase">vérification…</span>
+    </div>
+    <button id="refresh-status" type="button">Rafraîchir l'état</button>
+  </section>
+
+  <main class="conversation" id="conversation" aria-live="polite">
+    <p class="empty-state">Pose une question pour tester ABFINI de bout en bout, par exemple : « Qu'est-ce qu'ABFINI ? »</p>
+  </main>
+
+  <form class="composer" id="composer">
+    <textarea
+      id="message-input"
+      placeholder="Écrire un message…"
+      maxlength="4000"
+      rows="2"
+      required
+    ></textarea>
+    <button type="submit" id="send-button">Envoyer</button>
+  </form>
+
+  <script src="app.js"></script>
+</body>
+</html>
